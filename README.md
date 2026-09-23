@@ -7,7 +7,8 @@ Arranqué con cuatro CSV sueltos que no cruzaban entre sí y terminé con un mod
 dimensiones y tres tablas de hechos. La parte interesante del proyecto no fue el tablero, fue
 darme cuenta de que uno de los archivos estaba roto y decidir qué hacer con eso.
 
-![Página principal del tablero](docs/img/pagina_1_resumen.png)
+![Dashboard de Hospital-Operations-Analytics](Páginaprincipaldeltablero.png)
+
 
 ## Qué hay en los datos
 
