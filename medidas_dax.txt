@@ -1,0 +1,195 @@
+/* =====================================================================
+   Medidas DAX - Hospital Operations Analytics
+   Crear una tabla vacia llamada _Medidas y pegar cada medida ahi.
+   Las carpetas de visualizacion se asignan en el panel de propiedades.
+   ===================================================================== */
+
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [01 Demanda y capacidad] */
+/* ------------------------------------------------------------------ */
+
+Solicitudes = SUM ( fact_service_weekly[patients_request] )
+
+Admitidos = SUM ( fact_service_weekly[patients_admitted] )
+
+Rechazados = SUM ( fact_service_weekly[patients_refused] )
+
+Camas Disponibles = SUM ( fact_service_weekly[available_beds] )
+
+% Rechazo = DIVIDE ( [Rechazados], [Solicitudes] )
+
+% Ocupación = DIVIDE ( [Admitidos], [Camas Disponibles] )
+
+Presión de Demanda = DIVIDE ( [Solicitudes], [Camas Disponibles] )
+
+Semanas Críticas =
+CALCULATE (
+    COUNTROWS ( fact_service_weekly ),
+    fact_service_weekly[is_critical_week] = 1
+)
+
+Brecha de Camas Pico =
+MAXX (
+    SUMMARIZE ( fact_service_weekly, dim_week[week_id], dim_service[service_label] ),
+    [Solicitudes] - [Camas Disponibles]
+)
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [02 Satisfacción y clima] */
+/* ------------------------------------------------------------------ */
+
+Satisfacción Operativa = AVERAGE ( fact_service_weekly[patient_satisfaction] )
+
+Moral del Equipo = AVERAGE ( fact_service_weekly[staff_morale] )
+
+Satisfacción Pacientes = AVERAGE ( fact_admissions[satisfaction] )
+
+Brecha de Satisfacción = [Satisfacción Operativa] - [Satisfacción Pacientes]
+
+% Satisfacción Crítica =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( fact_admissions ), fact_admissions[satisfaction] < 70 ),
+    [Pacientes Internados]
+)
+
+% Satisfacción Excelente =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( fact_admissions ), fact_admissions[satisfaction] >= 90 ),
+    [Pacientes Internados]
+)
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [03 Pacientes] */
+/* ------------------------------------------------------------------ */
+
+Pacientes Internados = COUNTROWS ( fact_admissions )
+
+Estadía Promedio = AVERAGE ( fact_admissions[length_of_stay] )
+
+Estadía Mediana = MEDIAN ( fact_admissions[length_of_stay] )
+
+Días Cama Ocupados = SUM ( fact_admissions[length_of_stay] )
+
+Edad Promedio =
+AVERAGEX ( fact_admissions, RELATED ( dim_patient[age] ) )
+
+Egresos =
+CALCULATE (
+    COUNTROWS ( fact_admissions ),
+    USERELATIONSHIP ( dim_calendar[date], fact_admissions[departure_date] )
+)
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [04 Personal] */
+/* ------------------------------------------------------------------ */
+
+Dotación = DISTINCTCOUNT ( dim_staff[staff_id] )
+
+Turnos Planificados =
+CALCULATE (
+    COUNTROWS ( fact_staff_attendance ),
+    fact_staff_attendance[has_attendance_record] = 1
+)
+
+Turnos Cubiertos =
+CALCULATE (
+    SUM ( fact_staff_attendance[present] ),
+    fact_staff_attendance[has_attendance_record] = 1
+)
+
+Ausencias =
+CALCULATE (
+    SUM ( fact_staff_attendance[absent] ),
+    fact_staff_attendance[has_attendance_record] = 1
+)
+
+% Ausentismo = DIVIDE ( [Ausencias], [Turnos Planificados] )
+
+% Cobertura = DIVIDE ( [Turnos Cubiertos], [Turnos Planificados] )
+
+Pacientes por Agente Presente = DIVIDE ( [Admitidos], [Turnos Cubiertos] )
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [05 Tiempo] */
+/* ------------------------------------------------------------------ */
+
+Rechazados Semana Anterior =
+VAR SemActual = MAX ( dim_week[week_id] )
+RETURN
+    CALCULATE ( [Rechazados], ALL ( dim_week ), dim_week[week_id] = SemActual - 1 )
+
+Var % Rechazos SoS =
+DIVIDE ( [Rechazados] - [Rechazados Semana Anterior], [Rechazados Semana Anterior] )
+
+Rechazados MM4 =
+VAR Sem = MAX ( dim_week[week_id] )
+VAR Ventana =
+    FILTER ( ALL ( dim_week[week_id] ), dim_week[week_id] > Sem - 4 && dim_week[week_id] <= Sem )
+RETURN
+    AVERAGEX ( Ventana, CALCULATE ( [Rechazados] ) )
+
+Rechazados Acumulado =
+VAR Sem = MAX ( dim_week[week_id] )
+RETURN
+    CALCULATE ( [Rechazados], ALL ( dim_week ), dim_week[week_id] <= Sem )
+
+Solicitudes Mes Anterior =
+VAR M = MAX ( dim_week[month] )
+RETURN
+    CALCULATE ( [Solicitudes], ALL ( dim_week ), dim_week[month] = M - 1 )
+
+Var % Solicitudes MoM =
+DIVIDE ( [Solicitudes] - [Solicitudes Mes Anterior], [Solicitudes Mes Anterior] )
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [06 Selector dinámico] */
+/* ------------------------------------------------------------------ */
+
+Métrica Seleccionada =
+VAR m = SELECTEDVALUE ( 'Selector Métrica'[metrica], "Rechazados" )
+RETURN
+    SWITCH (
+        m,
+        "Solicitudes", [Solicitudes],
+        "Admitidos",   [Admitidos],
+        "Rechazados",  [Rechazados],
+        "% Rechazo",   [% Rechazo] * 100,
+        BLANK ()
+    )
+
+Título Dinámico =
+"Evolución semanal · " & SELECTEDVALUE ( 'Selector Métrica'[metrica], "Rechazados" )
+
+Filtro Activo =
+"Servicio: "
+    & IF (
+        ISFILTERED ( dim_service[service_label] ),
+        CONCATENATEX ( VALUES ( dim_service[service_label] ), dim_service[service_label], " · " ),
+        "todos"
+    )
+
+/* ------------------------------------------------------------------ */
+/* CARPETA: [07 Formato y semáforos] */
+/* ------------------------------------------------------------------ */
+
+Color % Rechazo =
+SWITCH (
+    TRUE (),
+    [% Rechazo] >= 0.60, "#B5705E",
+    [% Rechazo] >= 0.35, "#C9A66B",
+    "#6E9B8A"
+)
+
+Color Ausentismo =
+SWITCH (
+    TRUE (),
+    [% Ausentismo] >= 0.13, "#B5705E",
+    [% Ausentismo] >= 0.10, "#C9A66B",
+    "#6E9B8A"
+)
+
+Icono Tendencia Rechazo = IF ( [Var % Rechazos SoS] > 0, "▲", "▼" )
+
+Subtítulo Rechazo =
+FORMAT ( [Var % Rechazos SoS], "+0.0%;-0.0%;0.0%" ) & " vs. semana anterior"
