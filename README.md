@@ -7,7 +7,7 @@ Arranqué con cuatro CSV sueltos que no cruzaban entre sí y terminé con un mod
 dimensiones y tres tablas de hechos. La parte interesante no fue el tablero, fue darme cuenta de
 que uno de los archivos estaba roto y decidir qué hacer con eso.
 
-![Dashboard de Hospital-Operations-Analytics](hospital_dashboard_background.png)
+![Dashboard de Hospital-Operations-Analytics](powerbi/hospital_dashboard_background.png)
 
 ## Los datos
 
